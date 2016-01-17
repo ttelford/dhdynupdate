@@ -43,9 +43,9 @@ class dhdns():
         """Initialize dnsupdate"""
         # Pull configuration from config_settings
         self.api_key = config_settings[config_name]["api_key"]
+        self.local_hostname = config_settings[config_name]["local_hostname"]
         self.ipv4_if = config_settings["Global"]["ipv6_if"]
         self.ipv6_if = config_settings["Global"]["ipv6_if"]
-        self.local_hostname = config_settings["Global"]["local_hostname"]
         # Set up http_accessor object (get the right config settings).
         self.dreamhost_accessor = http_access(config_settings["Global"]["api_url"])
 
