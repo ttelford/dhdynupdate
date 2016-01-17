@@ -45,6 +45,7 @@ class dhdns():
         self.api_key = config_settings[config_name]["api_key"]
         self.ipv4_if = config_settings["Global"]["ipv6_if"]
         self.ipv6_if = config_settings["Global"]["ipv6_if"]
+        self.local_hostname = config_settings["Global"]["local_hostname"]
         # Set up http_accessor object (get the right config settings).
         self.dreamhost_accessor = http_access(config_settings["Global"]["api_url"])
 
@@ -69,6 +70,17 @@ class dhdns():
         # Run the query
         dns_records=self.dreamhost_accessor.request_get(dns_query)
         logging.debug(json.dumps(dns_records.json(), sort_keys=True, indent=4))
+
+        # Get the current DNS records for our configured hostname
+        target_records=[]
+        for entry in dns_records.json()["data"]:
+            if "record" in entry:
+                # Verify if our entry has the hostname we're looking for.
+                # Multiple entries may, if we're using native dual-stack IPv4 &
+                # IPv6.
+                if entry["record"] == self.local_hostname:
+                    target_records.append(entry)
+        print(target_records)
 
 #        # What time is now?
 #        current_date = datetime.datetime.now()
