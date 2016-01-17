@@ -28,37 +28,24 @@
 # those of the authors and should not be interpreted as representing official
 # policies, either expressed or implied.
 
-import json
 import sys
-import requests
-import uuid
+import configparser
+from dhdns import dhdns
 
-class http_access():
-    # Initialize...
-    def __init__(self, api_url):
-        """Initialize HTTP(S) Goo"""
-        self.api_url = api_url
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv
+    config = configparser.ConfigParser()
+    try:
+        config.read("dhdynupdate.conf")
+    except:
+        print("Error reading config file!")
 
-    def get_uuid(self):
-        return uuid.uuid4()
+    dh_dns = dhdns(config["DreamHost API Test Account"])
+    dh_dns.get_dh_dns_records()
+    print(dh_dns)
 
-    def request_put(self):
-        """HTTP(S) PUT Request"""
-        pass
-
-    def request_post(self):
-        """HTTP(S) POST Request"""
-        pass
-
-    def request_get(self, query):
-        """HTTP(S) GET Request"""
-        # Use a UUID to ensure our request is unique, only processed once.
-        query["unique_id"]=str(uuid.uuid4())
-        dreamhost_response = requests.get(self.api_url, params=query)
-        print(dreamhost_response.request.headers)
-        print(dreamhost_response.request.url)
-        print("DEBUG URL:" + self.api_url) 
-        dreamhost_response.close()
-        return dreamhost_response
+if __name__ == "__main__":
+    main()
 
 # vim: ts=4 sw=4 et
