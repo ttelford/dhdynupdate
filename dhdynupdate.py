@@ -28,22 +28,39 @@
 # those of the authors and should not be interpreted as representing official
 # policies, either expressed or implied.
 
-import sys
 import configparser
+import logging
+import sys
 from dhdns import dhdns
 
 def main(argv=None):
     if argv is None:
         argv = sys.argv
+    
+    # read configuration from file
     config = configparser.ConfigParser()
     try:
         config.read("dhdynupdate.conf")
     except:
         print("Error reading config file!")
+        sys.exit()
+    config_name = "DreamHost API Test Account"
+    
+    # set up logger
+    try:
+        logger = logging.basicConfig(
+                 format='%(levelname)s:%(message)s',
+                 filename = config["Global"]["log_file"],
+                 filemode='w',
+                 level=logging.DEBUG)
+    except:
+        print("Could not set up logger!")
+        exit()
 
-    dh_dns = dhdns(config["DreamHost API Test Account"])
+    dh_dns = dhdns(config, config_name)
+    dh_dns.get_if_addresses()
     dh_dns.get_dh_dns_records()
-    print(dh_dns)
+    logging.debug(dh_dns)
 
 if __name__ == "__main__":
     main()

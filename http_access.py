@@ -29,8 +29,9 @@
 # policies, either expressed or implied.
 
 import json
-import sys
+import logging
 import requests
+import sys
 import uuid
 
 class http_access():
@@ -54,10 +55,16 @@ class http_access():
         """HTTP(S) GET Request"""
         # Use a UUID to ensure our request is unique, only processed once.
         query["unique_id"]=str(uuid.uuid4())
-        dreamhost_response = requests.get(self.api_url, params=query)
-        print(dreamhost_response.request.headers)
-        print(dreamhost_response.request.url)
-        print("DEBUG URL:" + self.api_url) 
+        try:
+            dreamhost_response = requests.get(self.api_url, params=query)
+        except:
+            message="Could not contact host %(api_url)s.  Exiting"
+            print(message)
+            logging.critical(message)
+            sys.exit()
+        logging.debug(dreamhost_response.request.headers)
+        logging.debug(dreamhost_response.request.url)
+        logging.debug("DEBUG URL:" + self.api_url) 
         dreamhost_response.close()
         return dreamhost_response
 

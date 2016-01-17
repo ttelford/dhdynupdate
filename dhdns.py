@@ -30,22 +30,23 @@
 
 """DreamHost DNS Accessor Object"""
 
-import json
 import datetime
-import os
+import json
+import logging
 import netifaces
+import os
 from http_access import http_access
 
 class dhdns():
 
-    def __init__(self, config_settings):
+    def __init__(self, config_settings, config_name):
         """Initialize dnsupdate"""
         # Pull configuration from config_settings
-        self.api_key = config_settings["api_key"]
-        self.ipv4_if = config_settings["ipv6_if"]
-        self.ipv6_if = config_settings["ipv6_if"]
+        self.api_key = config_settings[config_name]["api_key"]
+        self.ipv4_if = config_settings["Global"]["ipv6_if"]
+        self.ipv6_if = config_settings["Global"]["ipv6_if"]
         # Set up http_accessor object (get the right config settings).
-        self.dreamhost_accessor = http_access(config_settings["api_url"])
+        self.dreamhost_accessor = http_access(config_settings["Global"]["api_url"])
 
     def get_if_addresses(self):
         """Get your local IP addresses from configured interfaces"""
@@ -55,11 +56,10 @@ class dhdns():
         # See [netifaces documentation](https://pypi.python.org/pypi/netifaces)
         # Technically, interfaces can have multiple IP addresses, but that's not
         # often the case with home users. Definitely not for me.
-        self.current_ipv4 = netifaces.ifaddresses(ipv4_if)[2][0]["addr"]
-        self.current_ipv6 = netifaces.ifaddresses(ipv6_if)[10][0]["addr"]
-
-        print(current_ipv4)
-        print(current_ipv6)
+        self.current_ipv4 = netifaces.ifaddresses(self.ipv4_if)[2][0]["addr"]
+        self.current_ipv6 = netifaces.ifaddresses(self.ipv6_if)[10][0]["addr"]
+        logging.info("The current IPv4 Address is:  %s" % (self.current_ipv4))
+        logging.info("The current IPv6 Address is:  %s" % (self.current_ipv6))
 
     def get_dh_dns_records(self):
         """Get the current DreamHost DNS records"""
@@ -68,7 +68,7 @@ class dhdns():
 
         # Run the query
         dns_records=self.dreamhost_accessor.request_get(dns_query)
-        print(json.dumps(dns_records.json(), sort_keys=True, indent=4))
+        logging.debug(json.dumps(dns_records.json(), sort_keys=True, indent=4))
 
 #        # What time is now?
 #        current_date = datetime.datetime.now()
