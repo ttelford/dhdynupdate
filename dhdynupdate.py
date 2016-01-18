@@ -30,6 +30,7 @@
 
 import argparse
 import configparser
+import daemon
 import logging
 import netifaces
 import sys
@@ -99,6 +100,9 @@ def main(argv=None):
 
     dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
     dh_dns.update_addresses()
+    
+#    with daemon.DaemonContext():
+#        dh_dns.main_loop()
 
 if __name__ == "__main__":
     main()
