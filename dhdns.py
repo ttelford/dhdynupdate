@@ -2,16 +2,16 @@
 
 # Copyright (c) 2016, Troy Telford
 # All rights reserved.
-# 
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
-# 
+#
 # 1. Redistributions of source code must retain the above copyright notice,
 #    this list of conditions and the following disclaimer.
 # 2. Redistributions in binary form must reproduce the above copyright notice,
 #    this list of conditions and the following disclaimer in the documentation
 #    and/or other materials provided with the distribution.
-# 
+#
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -23,7 +23,7 @@
 # CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
-# 
+#
 # The views and conclusions contained in the software and documentation are
 # those of the authors and should not be interpreted as representing official
 # policies, either expressed or implied.
@@ -32,24 +32,33 @@
 
 import datetime
 import json
+import ipaddress
 import logging
 import netifaces
 import os
 from http_access import http_access
 
 class dhdns():
-
     def __init__(self, config_settings, config_name):
         """Initialize dnsupdate"""
         # Pull configuration from config_settings
         self.api_key = config_settings[config_name]["api_key"]
         self.local_hostname = config_settings[config_name]["local_hostname"]
-        self.ipv4_if = config_settings["Global"]["ipv6_if"]
-        self.ipv6_if = config_settings["Global"]["ipv6_if"]
-        # Set up http_accessor object (get the right config settings).
+        self.addresses=[]
+        try:
+            self.ipv4_if = config_settings["Global"]["ipv4_if"]
+            self.get_if_address("ipv4")
+        except:
+            logging.warn("Could not get IPv4 interface (is it configured?)")
+        try:
+            self.ipv6_if = config_settings["Global"]["ipv6_if"]
+            self.get_if_address("ipv6")
+        except:
+            logging.warn("Could not get IPv6 interface (is it configured?)")
+        # Set up http_accessor object.
         self.dreamhost_accessor = http_access(config_settings["Global"]["api_url"])
 
-    def get_if_addresses(self):
+    def get_if_address(self, addr_type):
         """Get your local IP addresses from configured interfaces"""
         # Use netifaces to provide a somewhat standardized method of getting
         # interface information, such as IP addresses.
@@ -57,32 +66,112 @@ class dhdns():
         # See [netifaces documentation](https://pypi.python.org/pypi/netifaces)
         # Technically, interfaces can have multiple IP addresses, but that's not
         # often the case with home users. Definitely not for me.
-        self.current_ipv4 = netifaces.ifaddresses(self.ipv4_if)[2][0]["addr"]
-        self.current_ipv6 = netifaces.ifaddresses(self.ipv6_if)[10][0]["addr"]
-        logging.info("The current IPv4 Address is:  %s" % (self.current_ipv4))
-        logging.info("The current IPv6 Address is:  %s" % (self.current_ipv6))
+        # Not everybody has IPv6.  I imagine IPv4 may get to that point too...
+        if addr_type == "ipv6":
+            try:
+                new_address = ipaddress.ip_address(netifaces.ifaddresses(self.ipv6_if)[10][0]["addr"])
+                self.addresses.append(new_address)
+                logging.info("The current IPv6 Address is:  %s" % (newaddress))
+            except:
+                logging.warning("No IPv6 address retrieved from interface %s"
+                                % (self.ipv6_if))
+        elif addr_type == "ipv4":
+            try:
+                new_address = ipaddress.ip_address(netifaces.ifaddresses(self.ipv4_if)[2][0]["addr"])
+                self.addresses.append(new_address)
+                logging.info("The current IPv4 Address is:  %s" % (newaddress))
+            except:
+                logging.warning("No IPv4 address retrieved from interface %s"
+                                % (self.ipv4_if))
+        else:
+            logger.warning("Invalid or unsupported address type: %s"
+                           % (addr_type))
+            return 1
+        return 0
 
     def get_dh_dns_records(self):
         """Get the current DreamHost DNS records"""
         # Start by setting up a bit of data for the requests library.
-        dns_query = {"key":self.api_key, "cmd":"dns-list_records", "format":"json"}
-
-        # Run the query
-        dns_records=self.dreamhost_accessor.request_get(dns_query)
-        logging.debug(json.dumps(dns_records.json(), sort_keys=True, indent=4))
+        request_params = {"key":self.api_key, "cmd":"dns-list_records", "format":"json"}
+        dns_records = self.dreamhost_accessor.request_get(request_params)
 
         # Get the current DNS records for our configured hostname
         target_records=[]
-        for entry in dns_records.json()["data"]:
-            if "record" in entry:
-                # Verify if our entry has the hostname we're looking for.
-                # Multiple entries may, if we're using native dual-stack IPv4 &
-                # IPv6.
-                if entry["record"] == self.local_hostname:
-                    target_records.append(entry)
-        print(target_records)
+        for entry in dns_records["data"]:
+            # Only operate on editable entries...
+            if entry["editable"] == "1":
+                if "record" in entry:
+                    # Verify if our entry has the hostname we're looking for.
+                    # Multiple entries may, if we're using native dual-stack IPv4 &
+                    # IPv6.
+                    if entry["record"] == self.local_hostname:
+                        target_records.append(entry)
+            else:
+                logging.debug("Non-editable value:  %s" % entry)
+        return target_records
 
-#        # What time is now?
-#        current_date = datetime.datetime.now()
+    def remove_old_addresses(self, entry):
+        """Determine if the IP address at DreamHost is out of date vs the ip
+        addresses determined by get_if_address(). If a local IP address isn't
+        found for an interface, than the corresponding entry in DNS will be
+        removed"""
+        dh_addr = ipaddress.ip_address(entry["value"])
+        for addr in self.addresses:
+            if addr == dh_addr:
+                logging.info("DreamHost DNS entry matches our address:  %s"
+                             % (addr))
+                del self.addresses[self.addresses.index(addr)]
+            else:
+                logging.info("DreamHost DNS entry %s does not match our address:  %s"
+                             % (dh_addr, addr))
+                logging.info("Removing entry: %s" % (entry))
+                self.remove_record(entry)
 
+    def update_addresses(self):
+        """Check if an address needs to be updated, and builds a list of
+           entries to send off to DreamHost"""
+        # Remove entries that don't exist/are changing
+        # They will be re-added (with new values) in a moment.
+        for entry in self.get_dh_dns_records():
+            self.remove_old_addresses(entry)
+
+        # Add IP addresses detected from interfaces.
+        for address in self.addresses:
+            self.add_record(address)
+
+    def remove_record(self, entry):
+        # We update the record by removing the old record, and adding a new one.
+
+        # The DreamHost API only allows `record`, `type`. and `value` for
+        # record deletion; so we will create a new dict with those values.
+        request_params={key: entry[key] for key in ("record", "type", "value")}
+        request_params["key"] = self.api_key
+        request_params["cmd"] = "dns-remove_record"
+        request_params["format"] = "json"
+        logging.info("Removing DNS entry with parameters: %s" %(request_params))
+        output = self.self.dreamhost_accessor.request_get(request_params)
+        if output["result"] != "success":
+            logging.error("Could not update entry for address %s" % (address))
+
+    def add_record(self, address):
+        # Create the requst parameters to add for the entry & record type
+        # Add has four fields:  record, type, value comment
+        request_params={}
+        request_params["key"] = self.api_key
+        request_params["cmd"] = "dns-add_record"
+        request_params["record"] = self.local_hostname
+        request_params["comment"] = "Automated DNS update by dhdynupdate"
+        request_params["format"] = "json"
+        request_params["value"] = address.compress()
+        if address.version == 4:
+            request_params["type"] = "A"
+        elif address.version == 6:
+            request_params["type"] = "AAAA"
+        else:
+            logging.critical("Invalid address type %s ! Exiting!" % (address))
+            sys.exit()
+        logging.info("Adding DNS entry with parameters: %s" %(request_params))
+        output = self.dreamhost_accessor.request_get(request_params)
+        if output["result"] != "success":
+            logging.error("Could not update entry for address %s" % (address))
 # vim: ts=4 sw=4 et
