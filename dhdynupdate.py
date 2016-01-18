@@ -31,6 +31,7 @@
 import argparse
 import configparser
 import logging
+import netifaces
 import sys
 from dhdns import dhdns
 
@@ -57,19 +58,46 @@ def main(argv=None):
     except:
         print("Error reading config file!")
         sys.exit()
-    
-    # set up logger
+
+    # Get configuration settings
+    try:
+        supported_address_families = ("AF_INET", "AF_INET6")
+        configured_interfaces = {}
+        api_key = config[args.config_name]["api_key"]
+        api_url = config["Global"]["api_url"]
+        local_hostname = config[args.config_name]["local_hostname"]
+        logfile = config["Global"]["log_file"]
+        for addr_type in supported_address_families:
+            interface = config["Global"][addr_type]
+            if interface in netifaces.interfaces():
+                configured_interfaces[addr_type] = interface
+    except KeyError as error:
+        # Technically, logger isn't "configured" -- it'll dump messages to the
+        # console.
+        logging.critical("Could not find configuration for %s" % (error))
+        sys.exit(1)
+    except:
+        logging.critical("Exception in parsing configuration settings: %s" % (sys.exc_info()[0]))
+        sys.exit(1)
+
+    # set up logging
     try:
         logger = logging.basicConfig(
                  format='%(levelname)s:%(message)s',
-                 filename = config["Global"]["log_file"],
+                 filename = logfile,
                  filemode='w',
                  level=logging.DEBUG)
+    except PermissionError as error:
+        logging.critical("%s" % (error))
+    except FileNotFoundError as error:
+        logging.critical("It's likely your logfile path is invalid: %s" % (logfile))
+        logging.critical("%s" % (error))
     except:
-        print("Could not set up logger!")
-        exit()
+        logging.critical("Exception in setting up logging: %s" % (sys.exc_info()[0]))
+        logging.critical("Could not set up logging! Exiting!")
+        sys.exit(1)
 
-    dh_dns = dhdns(config, args.config_name)
+    dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
     dh_dns.update_addresses()
 
 if __name__ == "__main__":

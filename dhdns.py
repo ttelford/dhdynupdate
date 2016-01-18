@@ -31,72 +31,28 @@
 """DreamHost DNS Accessor Object"""
 
 import datetime
-import json
 import ipaddress
 import logging
-import netifaces
 import os
 import sys
-from http_access import http_access
+import http_access
+import interfaces
 
 class dhdns():
     api_key = ""
     local_hostname = ""
-    local_addresses = []
 
-    def __init__(self, config_settings, config_name):
+    def __init__(self, api_key, api_url, local_hostname, configured_interfaces):
         """Initialize dnsupdate"""
         # Pull configuration from config_settings
-        self.api_key = config_settings[config_name]["api_key"]
-        self.local_hostname = config_settings[config_name]["local_hostname"]
-        local_interfaces={}
-        try:
-            local_interfaces["IPv4"] = config_settings["Global"]["ipv4_if"]
-        except KeyError as error:
-            logging.error("Could not find key %s" % (error))
-        try:
-            local_interfaces["IPv6"] = config_settings["Global"]["ipv6_if"]
-        except KeyError as error:
-            logging.error("Could not find key %s" % (error))
-        self.get_if_addresses(local_interfaces)
+        self.api_key = api_key
+        self.local_hostname = local_hostname 
+        self.interface = interfaces.interfaces(configured_interfaces)
         # Set up http_accessor object.
         try:
-            self.dreamhost_accessor = http_access(config_settings["Global"]["api_url"])
+            self.dreamhost_accessor = http_access.http_access(api_url)
         except KeyError as error:
             logging.critical("Could not set up DreamHost API communications. Error:  %s" % (error))
-
-    def get_if_addresses(self, interfaces):
-        """Get your local IP addresses from configured interfaces"""
-        # Use netifaces to provide a somewhat standardized method of getting
-        # interface information, such as IP addresses.
-        # This chooses the first address for the interface.
-        # See [netifaces documentation](https://pypi.python.org/pypi/netifaces)
-        # Technically, interfaces can have multiple IP addresses, but that's not
-        # often the case with home users. Definitely not for me.
-        # Not everybody has IPv6.  I imagine IPv4 may get to that point too...
-        for addr_type in interfaces:
-            if interfaces[addr_type] != "None":
-                address_retrieved = True
-                if addr_type == "IPv6":
-                    address_family = 10
-                elif addr_type == "IPv4":
-                    address_family = 2
-                try:
-                    new_address = netifaces.ifaddresses(interfaces[addr_type])[address_family][0]["addr"]
-                except ValueError as exception:
-                    logging.warning("Could not get %s address from interface %s." % (addr_type, interfaces[addr_type]))
-                    logging.warning("Exception: %s" % (exception))
-                    address_retrieved = False
-                except KeyError as index:
-                    if str(index) == str(address_family):
-                        logging.warning("No %s address is assigned to interface %s." % (addr_type, interfaces[addr_type]))
-                    else:
-                        logging.error("Unknown KeyError %s in finding %s address" % (index, addr_type))
-                    address_retrieved = False
-                if address_retrieved:
-                    new_address = ipaddress.ip_address(new_address)
-                    self.local_addresses.append(new_address)
-                    logging.info("The current %s Address on %s is: %s" % (addr_type, interfaces[addr_type], new_address))
 
     def get_dh_dns_records(self):
         """Get the current DreamHost DNS records"""
@@ -123,12 +79,12 @@ class dhdns():
                         # prevent a read-only record from being "added"
                         dh_addr = ipaddress.ip_address(entry["value"])
                         readonly_index = []
-                        for addr in self.local_addresses:
+                        for addr in self.interface.addresses:
                             if addr.version == dh_addr.version:
                                 logging.info("Not operating on %s, as it's read-only" % (entry["record"]))
-                                readonly_index.append(self.local_addresses.index(addr))
+                                readonly_index.append(self.interface.addresses.index(addr))
                         for index in readonly_index:
-                            del self.local_addresses[index]
+                            del self.interface.addresses[index]
         return target_records
 
     def remove_old_addresses(self, entry, matching_index):
@@ -137,7 +93,7 @@ class dhdns():
         found for an interface, than the corresponding entry in DNS will be
         removed"""
         dh_addr = ipaddress.ip_address(entry["value"])
-        for addr in self.local_addresses:
+        for addr in self.interface.addresses:
             logging.debug(entry)
             logging.debug("dh_addr: %s - %s" % (dh_addr, dh_addr.version))
             logging.debug("addr: %s - %s" % (addr, addr.version))
@@ -146,7 +102,7 @@ class dhdns():
                     logging.debug("match")
                     logging.info("DreamHost DNS entry matches our address:  %s"
                                  % (addr))
-                    matching_index.append(self.local_addresses.index(addr))
+                    matching_index.append(self.interface.addresses.index(addr))
                 else:
                     logging.debug("no match")
                     logging.info("DreamHost DNS entry %s does not match our address:  %s"
@@ -169,13 +125,13 @@ class dhdns():
         # Remove addresses which do not need updating; reverse order or else
         # the indexes will be wrongthe next time around.
         for index in sorted(matching_address_index, reverse=True):
-            del self.local_addresses[index]
+            del self.interface.addresses[index]
 
         # Add IP addresses detected from interfaces.
         # NOTE:  we can't do much about readonly entries that aren't listed
         # when we query DreamHost for DNS records. This means the shipping
         # configuration file will fail if you have an IPv6 address.
-        for address in self.local_addresses:
+        for address in self.interface.addresses:
             self.add_record(address)
 
     def remove_record(self, entry):
