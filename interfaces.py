@@ -74,8 +74,23 @@ class interfaces():
                 address_family = netifaces.AF_INET6
             elif addr_type == "AF_INET":
                 address_family = netifaces.AF_INET
+            interface_addresses = netifaces.ifaddresses(interfaces[addr_type])
             try:
-                new_address = netifaces.ifaddresses(interfaces[addr_type])[address_family][0]["addr"]
+                if addr_type == "AF_INET6":
+                    # I'm not counting on IPv6 to only have one address;
+                    # mulitple is common as there's always link-local in
+                    # addition to an internet-routable address.
+                    # Make sure we don't get a link-local IPv6 Address.
+                    # These are in the subnet fe80:://10
+                    for address in interface_addresses[address_family]:
+                        address_retrieved = True
+                        if address["addr"].split(':')[0] != "fe80":
+                            new_address = address["addr"]
+                            break
+                        # We haven't found a non-link-local IPv6 Address
+                        address_retrieved = False
+                else:
+                    new_address = interface_addresses[address_family][0]["addr"]
             except ValueError as exception:
                 logging.warning("Could not get %s address from interface %s." % (addr_type, interfaces[addr_type]))
                 logging.warning("Exception: %s" % (exception))
