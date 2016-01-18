@@ -47,9 +47,12 @@ class http_access():
         try:
             dreamhost_response = requests.get(self.api_url, params=request_params)
         except:
+            logging.critical("Unexpected error:", sys.exc_info()[0])
+            print("Unexpected error:", sys.exc_info()[0])
             message="Could not contact host %(api_url)s.  Exiting"
             print(message)
             logging.critical(message)
+            raise
             sys.exit()
         dreamhost_response.close()
         logging.debug("API URL:" + self.api_url)

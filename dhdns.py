@@ -36,29 +36,36 @@ import ipaddress
 import logging
 import netifaces
 import os
+import sys
 from http_access import http_access
 
 class dhdns():
+    api_key = ""
+    local_hostname = ""
+    local_addresses = []
+
     def __init__(self, config_settings, config_name):
         """Initialize dnsupdate"""
         # Pull configuration from config_settings
         self.api_key = config_settings[config_name]["api_key"]
         self.local_hostname = config_settings[config_name]["local_hostname"]
-        self.local_addresses=[]
+        local_interfaces={}
         try:
-            self.ipv4_if = config_settings["Global"]["ipv4_if"]
-            self.get_if_address("ipv4")
-        except:
-            logging.warn("Could not get IPv4 interface (is it configured?)")
+            local_interfaces["IPv4"] = config_settings["Global"]["ipv4_if"]
+        except KeyError as error:
+            logging.error("Could not find key %s" % (error))
         try:
-            self.ipv6_if = config_settings["Global"]["ipv6_if"]
-            self.get_if_address("ipv6")
-        except:
-            logging.warn("Could not get IPv6 interface (is it configured?)")
+            local_interfaces["IPv6"] = config_settings["Global"]["ipv6_if"]
+        except KeyError as error:
+            logging.error("Could not find key %s" % (error))
+        self.get_if_addresses(local_interfaces)
         # Set up http_accessor object.
-        self.dreamhost_accessor = http_access(config_settings["Global"]["api_url"])
+        try:
+            self.dreamhost_accessor = http_access(config_settings["Global"]["api_url"])
+        except KeyError as error:
+            logging.critical("Could not set up DreamHost API communications. Error:  %s" % (error))
 
-    def get_if_address(self, addr_type):
+    def get_if_addresses(self, interfaces):
         """Get your local IP addresses from configured interfaces"""
         # Use netifaces to provide a somewhat standardized method of getting
         # interface information, such as IP addresses.
@@ -67,38 +74,40 @@ class dhdns():
         # Technically, interfaces can have multiple IP addresses, but that's not
         # often the case with home users. Definitely not for me.
         # Not everybody has IPv6.  I imagine IPv4 may get to that point too...
-        if addr_type == "ipv6":
-            try:
-                new_address = ipaddress.ip_address(netifaces.ifaddresses(self.ipv6_if)[10][0]["addr"])
-                self.local_addresses.append(new_address)
-                logging.info("The current IPv6 Address is:  %s" % (newaddress))
-            except:
-                logging.warning("No IPv6 address retrieved from interface %s"
-                                % (self.ipv6_if))
-        elif addr_type == "ipv4":
-            try:
-                new_address = ipaddress.ip_address(netifaces.ifaddresses(self.ipv4_if)[2][0]["addr"])
-                self.local_addresses.append(new_address)
-                logging.info("The current IPv4 Address is:  %s" % (newaddress))
-            except:
-                logging.warning("No IPv4 address retrieved from interface %s"
-                                % (self.ipv4_if))
-        else:
-            logger.warning("Invalid or unsupported address type: %s"
-                           % (addr_type))
-            return 1
-        return 0
+        for addr_type in interfaces:
+            if interfaces[addr_type] != "None":
+                address_retrieved = True
+                if addr_type == "IPv6":
+                    address_family = 10
+                elif addr_type == "IPv4":
+                    address_family = 2
+                try:
+                    new_address = netifaces.ifaddresses(interfaces[addr_type])[address_family][0]["addr"]
+                except ValueError as exception:
+                    logging.warning("Could not get %s address from interface %s." % (addr_type, interfaces[addr_type]))
+                    logging.warning("Exception: %s" % (exception))
+                    address_retrieved = False
+                except KeyError as index:
+                    if str(index) == str(address_family):
+                        logging.warning("No %s address is assigned to interface %s." % (addr_type, interfaces[addr_type]))
+                    else:
+                        logging.error("Unknown KeyError %s in finding %s address" % (index, addr_type))
+                    address_retrieved = False
+                if address_retrieved:
+                    new_address = ipaddress.ip_address(new_address)
+                    self.local_addresses.append(new_address)
+                    logging.info("The current %s Address on %s is: %s" % (addr_type, interfaces[addr_type], new_address))
 
     def get_dh_dns_records(self):
         """Get the current DreamHost DNS records"""
         # Start by setting up a bit of data for the requests library.
         request_params = {"key":self.api_key, "cmd":"dns-list_records", "format":"json"}
         dns_records = self.dreamhost_accessor.request_get(request_params)
-        self.dns_records = dns_records["data"]
+        dns_records = dns_records["data"]
 
         # Get the current DNS records for our configured hostname
         target_records=[]
-        for entry in self.dns_records:
+        for entry in dns_records:
             # Only operate on editable entries...
             if entry["editable"] == "1":
                 if "record" in entry:
