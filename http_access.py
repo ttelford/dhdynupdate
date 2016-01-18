@@ -40,16 +40,12 @@ class http_access():
         """Initialize HTTP(S) Goo"""
         self.api_url = api_url
 
-    def api_request(self, request_params):
-        response = self.request_get(request_params)
-        return response_json
-
-    def request_get(self, query):
+    def request_get(self, request_params):
         """HTTP(S) GET Request"""
         # Use a UUID to ensure our request is unique, only processed once.
-        query["unique_id"]=str(uuid.uuid4())
+        request_params["unique_id"]=str(uuid.uuid4())
         try:
-            dreamhost_response = requests.get(self.api_url, params=query)
+            dreamhost_response = requests.get(self.api_url, params=request_params)
         except:
             message="Could not contact host %(api_url)s.  Exiting"
             print(message)
@@ -64,7 +60,7 @@ class http_access():
             logging.error("DreamHost did not complete the request: %s"
                           % (request_params))
         else:
-            logging.debug("Successful Request:  %s, %s"
+            logging.info("Successful Request:  %s, %s"
                           % (response_json["result"],
                             (json.dumps(dreamhost_response.json(),
                             sort_keys=True, indent=4))))
