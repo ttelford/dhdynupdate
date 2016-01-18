@@ -28,6 +28,7 @@
 # those of the authors and should not be interpreted as representing official
 # policies, either expressed or implied.
 
+import argparse
 import configparser
 import logging
 import sys
@@ -36,6 +37,18 @@ from dhdns import dhdns
 def main(argv=None):
     if argv is None:
         argv = sys.argv
+    # Command line parsing...
+    cmd_parser = argparse.ArgumentParser()
+    cmd_parser.add_argument("-d", "--daemon", action='store_true',
+                            default=False, required=False,
+                            dest="daemonize",
+                            help="Execute %(prog)s as a dæmon")
+    cmd_parser.add_argument("-c", "--config", action='store',
+                            type=str, default="DreamHost API Test Account",
+                            required=False, metavar="config",
+                            dest="config_name",
+                            help="Configuration name")
+    args = cmd_parser.parse_args()
 
     # read configuration from file
     config = configparser.ConfigParser()
@@ -44,7 +57,6 @@ def main(argv=None):
     except:
         print("Error reading config file!")
         sys.exit()
-    config_name = "DreamHost API Test Account"
     
     # set up logger
     try:
@@ -57,7 +69,7 @@ def main(argv=None):
         print("Could not set up logger!")
         exit()
 
-    dh_dns = dhdns(config, config_name)
+    dh_dns = dhdns(config, args.config_name)
     dh_dns.update_addresses()
 
 if __name__ == "__main__":
