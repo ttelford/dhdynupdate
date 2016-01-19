@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 # Copyright (c) 2016, Troy Telford
 # All rights reserved.
@@ -33,8 +33,28 @@ import configparser
 import daemon
 import logging
 import netifaces
+import time
 import sys
 from dhdns import dhdns
+
+def setup_logger(logfile):
+    try:
+        logger = logging.basicConfig(
+                 format='%(levelname)s:%(message)s',
+                 filename = logfile,
+                 filemode='w',
+                 level=logging.DEBUG)
+    except PermissionError as error:
+        logging.critical("%s" % (error))
+    except FileNotFoundError as error:
+        logging.critical("It's likely your logfile path is invalid: %s" % (logfile))
+        logging.critical("%s" % (error))
+    except NameError as error:
+        logging.critical("%s" % (error))
+    except:
+        logging.critical("Exception in setting up logging: %s" % (sys.exc_info()[0]))
+        logging.critical("Could not set up logging! Exiting!")
+        sys.exit(1)
 
 def main(argv=None):
     if argv is None:
@@ -68,6 +88,7 @@ def main(argv=None):
         api_url = config["Global"]["api_url"]
         local_hostname = config[args.config_name]["local_hostname"]
         logfile = config["Global"]["log_file"]
+        update_interval = int(config["Global"]["update_interval"])
         for addr_type in supported_address_families:
             interface = config["Global"][addr_type]
             if interface in netifaces.interfaces():
@@ -78,31 +99,27 @@ def main(argv=None):
         logging.critical("Could not find configuration for %s" % (error))
         sys.exit(1)
     except:
-        logging.critical("Exception in parsing configuration settings: %s" % (sys.exc_info()[0]))
+        logging.critical("Exception in parsing configuration settings: %s"
+                         % (sys.exc_info()[0]))
         sys.exit(1)
 
-    # set up logging
-    try:
-        logger = logging.basicConfig(
-                 format='%(levelname)s:%(message)s',
-                 filename = logfile,
-                 filemode='w',
-                 level=logging.DEBUG)
-    except PermissionError as error:
-        logging.critical("%s" % (error))
-    except FileNotFoundError as error:
-        logging.critical("It's likely your logfile path is invalid: %s" % (logfile))
-        logging.critical("%s" % (error))
-    except:
-        logging.critical("Exception in setting up logging: %s" % (sys.exc_info()[0]))
-        logging.critical("Could not set up logging! Exiting!")
-        sys.exit(1)
+#   When in doubt, do not run as a daemon. Daemon keeps stack traces from being
+#   printed, and you're left wondering.
+    if args.daemonize:
+        with daemon.DaemonContext():
+            # set up logging; it's much easier to just set it up within the
+            # DaemonContext. Outside the daemoncontext requires a lot more work...
+            setup_logger(logfile)
+            dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
+            while True:
+                dh_dns.update_if_necessary()
+                time.sleep(update_interval)
+    else:
+        setup_logger(logfile)
+        dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
+        dh_dns.update_if_necessary()
 
-    dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
-    dh_dns.update_addresses()
-    
-#    with daemon.DaemonContext():
-#        dh_dns.main_loop()
+    logging.shutdown()
 
 if __name__ == "__main__":
     main()

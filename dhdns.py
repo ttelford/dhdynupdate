@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 # Copyright (c) 2016, Troy Telford
 # All rights reserved.
@@ -30,11 +30,11 @@
 
 """DreamHost DNS Accessor Object"""
 
-import datetime
 import ipaddress
 import logging
 import os
 import sys
+
 import http_access
 import interfaces
 
@@ -53,6 +53,12 @@ class dhdns():
             self.dreamhost_accessor = http_access.http_access(api_url)
         except KeyError as error:
             logging.critical("Could not set up DreamHost API communications. Error:  %s" % (error))
+
+    def update_if_necessary(self):
+        # TODO We really only want to update_addresses() if one or more of our
+        # IP addresses have changed.
+        self.update_addresses()
+        logging.info(self.interface.addresses)
 
     def get_dh_dns_records(self):
         """Get the current DreamHost DNS records"""
@@ -87,7 +93,7 @@ class dhdns():
                             del self.interface.addresses[index]
         return target_records
 
-    def remove_old_addresses(self, entry, matching_index):
+    def remove_old_records(self, entry, matching_index):
         """Determine if the IP address at DreamHost is out of date vs the ip
         addresses determined by get_if_address(). If a local IP address isn't
         found for an interface, than the corresponding entry in DNS will be
@@ -121,7 +127,7 @@ class dhdns():
         # Remove editable entries that don't exist/are changing
         # They will be re-added (with new values) in a moment.
         for entry in self.get_dh_dns_records():
-            matching_address_index = self.remove_old_addresses(entry, matching_address_index)
+            matching_address_index = self.remove_old_records(entry, matching_address_index)
         # Remove addresses which do not need updating; reverse order or else
         # the indexes will be wrongthe next time around.
         for index in sorted(matching_address_index, reverse=True):
