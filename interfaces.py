@@ -92,19 +92,26 @@ class interfaces():
                 else:
                     new_address = interface_addresses[address_family][0]["addr"]
             except ValueError as exception:
-                logging.warning("Could not get %s address from interface %s." % (addr_type, interfaces[addr_type]))
+                # Interface doesn't have an address we could report.
+                logging.warning("Could not get %s address from interface %s."
+                                % (addr_type, interfaces[addr_type]))
                 logging.warning("Exception: %s" % (exception))
                 address_retrieved = False
             except KeyError as index:
+                # Most likely, there is no IP address for the address family
+                # (ie. no IPv4 or IPv6 address on the interface)
                 if str(index) == str(address_family):
-                    logging.warning("No %s address is assigned to interface %s." % (addr_type, interfaces[addr_type]))
+                    logging.warning("No %s address is assigned to interface %s." 
+                                    % (addr_type, interfaces[addr_type]))
                 else:
-                    logging.error("Unknown KeyError %s in finding %s address" % (index, addr_type))
+                    logging.error("Unknown KeyError %s in finding %s address"
+                                  % (index, addr_type))
                 address_retrieved = False
             if address_retrieved:
                 new_address = ipaddress.ip_address(new_address)
                 addresses.append(new_address)
-                logging.info("The current %s Address on %s is: %s" % (addr_type, interfaces[addr_type], new_address))
+                logging.info("The current %s Address on %s is: %s"
+                             % (addr_type, interfaces[addr_type], new_address))
         return addresses
 
 # vim: ts=4 sw=4 et
