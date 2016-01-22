@@ -1,0 +1,18 @@
+[Unit]
+Description=DH Dynamic DNS Update
+After=network.target auditd.service
+
+[Service]
+ExecStartPre=/bin/mkdir -p /run/dhdynupdate
+ExecStartPre=/bin/chown dhdynupdate:dhdynupdate /run/dhdynupdate
+ExecStart=/usr/local/dhdynupdate/dhdynupdate.py -c your.domain.name --daemon
+PIDFile=/run/dhdynupdate/dhdynupdate.pid
+ExecReload=/bin/kill $MAINPID
+KillMode=process
+Restart=on-failure
+User=dhdynupdate
+TimeoutSec=10
+
+[Install]
+WantedBy=multi-user.target
+Alias=dhdynupdate.service
