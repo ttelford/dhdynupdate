@@ -30,6 +30,7 @@
 
 """DreamHost DNS Accessor Object"""
 
+import copy
 import ipaddress
 import logging
 import os
@@ -46,8 +47,10 @@ class dhdns():
         """Initialize dnsupdate"""
         # Pull configuration from config_settings
         self.api_key = api_key
-        self.local_hostname = local_hostname 
-        self.interface = interfaces.interfaces(configured_interfaces)
+        self.local_hostname = local_hostname
+        self.configured_interfaces = configured_interfaces
+        self.interface = interfaces.interfaces(self.configured_interfaces)
+        self.prev_addresses = [ ipaddress.ip_address('127.0.0.1'), ipaddress.ip_address('::1') ]
         # Set up http_accessor object.
         try:
             self.dreamhost_accessor = http_access.http_access(api_url)
@@ -55,15 +58,48 @@ class dhdns():
             logging.critical("Could not set up DreamHost API communications. Error:  %s" % (error))
 
     def update_if_necessary(self):
-        # TODO We really only want to update_addresses() if one or more of our
+        """Main dæmon loop - watches for changes to IP addresses on the host
+        system, and if any are detected, an update of DreamHost is
+        triggered."""
+        # We really only want to update_addresses() if one or more of our
         # IP addresses have changed.
-        self.update_addresses()
-        logging.info(self.interface.addresses)
+        update_ipv6 = True
+        update_ipv4 = True
+        logging.debug("Self.interface is:  %s" % (self.interface.addresses))
+        self.interface.addresses = self.interface.get_if_addresses(self.configured_interfaces)
+        for naddress in self.interface.addresses:
+            logging.debug("New address:  %s" % (naddress))
+            for paddress in self.prev_addresses:
+                logging.debug("Previous address:  %s" % (paddress))
+                if naddress == paddress:
+                    logging.debug("New %s = Old %s" % (naddress, paddress))
+                    if naddress.version == 6:
+                        update_ipv6 = False
+                    elif naddress.version == 4:
+                        update_ipv4 = False
+                    else:
+                        logging.warn("Error in address version retrieved:  %s" %
+                                    (naddress.version))
+                elif naddress.version == paddress.version:
+                    logging.debug("New %s != Old %s" % (naddress, paddress))
+                else:
+                    # Really not a very interesting metric, even on debug...
+                    # logging.debug("Address types do not match: New %s != Old %s" % (naddress, paddress))
+                    pass
+
+        # If we have detected a changed IP address, update_addresses(), and
+        # update the prev_addresses
+        if update_ipv6 or update_ipv4:
+            logging.debug("Resetting prev addresses: %s = %s" % (self.prev_addresses, self.interface.addresses))
+            self.prev_addresses = copy.copy(self.interface.addresses)
+            logging.info("Address change detected; updating DreamHost")
+            self.update_addresses()
 
     def get_dh_dns_records(self):
         """Get the current DreamHost DNS records"""
         # Start by setting up a bit of data for the requests library.
         request_params = {"key":self.api_key, "cmd":"dns-list_records", "format":"json"}
+        logging.info("Connecting to DreamHost API to obtain current DNS records")
         dns_records = self.dreamhost_accessor.request_get(request_params)
         dns_records = dns_records["data"]
 
@@ -77,6 +113,7 @@ class dhdns():
                     # Multiple entries may, if we're using native dual-stack IPv4 &
                     # IPv6.
                     if entry["record"] == self.local_hostname:
+                        logging.debug("Editable value:  %s" % entry)
                         target_records.append(entry)
             else: # read-only entry
                 logging.debug("Non-editable value:  %s" % entry)
@@ -105,17 +142,15 @@ class dhdns():
             logging.debug("addr: %s - %s" % (addr, addr.version))
             if addr.version == dh_addr.version:
                 if addr == dh_addr:
-                    logging.debug("match")
                     logging.info("DreamHost DNS entry matches our address:  %s"
                                  % (addr))
                     matching_index.append(self.interface.addresses.index(addr))
                 else:
-                    logging.debug("no match")
                     logging.info("DreamHost DNS entry %s does not match our address:  %s"
                                  % (dh_addr, addr))
                     self.remove_record(entry)
             else:
-                logging.debug("addr_versions do not match")
+                logging.debug("Address type (IPv4/IPv6) do not match")
         return matching_index
 
     def update_addresses(self):
@@ -141,23 +176,31 @@ class dhdns():
             self.add_record(address)
 
     def remove_record(self, entry):
+        """Remove old DNS records from DreamHost.  There is no option to modify
+        existing records; they must be deleted and then re-added."""
         # We update the record by removing the old record, and adding a new one.
         # DreamHost only allows `record`, `type`. and `value` for DNS
         # record deletion; so we will create a new dict with those values.
-        # Start with things from entry
+        # Start by building request parameters for the request library
         request_params={key: entry[key] for key in ("record", "type", "value")}
         # Add things we need - api.key, cmd, format...
         request_params["key"] = self.api_key
         request_params["cmd"] = "dns-remove_record"
         request_params["format"] = "json"
+
+        # And now remove the old/nonmatching values from DreamHost
         logging.info("Removing DNS entry with parameters: %s" %(request_params))
         output = self.dreamhost_accessor.request_get(request_params)
         if output["result"] != "success":
             logging.error("Could not remove entry for address %s" % (request_params["value"]))
 
     def add_record(self, address):
+        """Add new records to DreamHost.  There is no option to modify
+        existing records; they must be deleted and then re-added."""
         # Create the requst parameters to add for the entry & record type
         # Add has four fields:  record, type, value comment
+        
+        # First, we create the request parameters for the request library
         request_params={}
         request_params["key"] = self.api_key
         request_params["cmd"] = "dns-add_record"
@@ -172,6 +215,8 @@ class dhdns():
         else:
             logging.critical("Invalid address type %s ! Exiting!" % (address))
             sys.exit()
+
+        #And now that we have the parameters, we update DreamHost:
         logging.info("Adding DNS entry with parameters: %s" %(request_params))
         output = self.dreamhost_accessor.request_get(request_params)
         if output["result"] != "success":

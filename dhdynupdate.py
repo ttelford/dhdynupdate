@@ -37,13 +37,14 @@ import time
 import sys
 from dhdns import dhdns
 
-def setup_logger(logfile):
+def setup_logger(logfile, log_level):
+    """Does logging setup, using python logging"""
     try:
         logger = logging.basicConfig(
                  format='%(levelname)s:%(message)s',
                  filename = logfile,
                  filemode='w',
-                 level=logging.DEBUG)
+                 level=log_level)
     except PermissionError as error:
         logging.critical("%s" % (error))
     except FileNotFoundError as error:
@@ -57,6 +58,7 @@ def setup_logger(logfile):
         sys.exit(1)
 
 def main(argv=None):
+    """Command line parser, begins DaemonContext for main loop"""
     if argv is None:
         argv = sys.argv
     # Command line parsing...
@@ -65,6 +67,10 @@ def main(argv=None):
                             default=False, required=False,
                             dest="daemonize",
                             help="Execute %(prog)s as a dæmon")
+    cmd_parser.add_argument("--debug", action='store', type=str,
+                            default="WARNING", required=False,
+                            dest="log_level", metavar="lvl",
+                            help="Log Level, one of CRITICAL, ERROR, WARNING, INFO, DEBUG")
     cmd_parser.add_argument("-c", "--config", action='store',
                             type=str, default="DreamHost API Test Account",
                             required=False, metavar="config",
@@ -79,6 +85,19 @@ def main(argv=None):
     except:
         print("Error reading config file!")
         sys.exit()
+
+    if args.log_level == "CRITICAL":
+        log_level = 50
+    elif args.log_level == "ERROR":
+        log_level = 40
+    elif args.log_level == "WARNING":
+        log_level = 30
+    elif args.log_level == "INFO":
+        log_level = 20
+    elif args.log_level == "DEBUG":
+        log_level = 10
+    else:
+        log_level = 0
 
     # Get configuration settings
     try:
@@ -104,21 +123,24 @@ def main(argv=None):
         sys.exit(1)
 
 #   When in doubt, do not run as a daemon. Daemon keeps stack traces from being
-#   printed, and you're left wondering.
+#   printed, and you're left wondering why the dæmon is quitting.
     if args.daemonize:
         with daemon.DaemonContext():
             # set up logging; it's much easier to just set it up within the
             # DaemonContext. Outside the daemoncontext requires a lot more work...
-            setup_logger(logfile)
+            setup_logger(logfile, log_level)
+            logging.warn("Starting dhdynupdater...")
             dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
             while True:
                 dh_dns.update_if_necessary()
                 time.sleep(update_interval)
     else:
-        setup_logger(logfile)
+        setup_logger(logfile, log_level)
+        logging.warn("Starting dhdynupdater...")
         dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
         dh_dns.update_if_necessary()
 
+    logging.warn("Closing dhdynupdater...")
     logging.shutdown()
 
 if __name__ == "__main__":
