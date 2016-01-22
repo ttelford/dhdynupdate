@@ -57,7 +57,7 @@ def setup_logger(logfile, log_level):
     except:
         logging.critical("Exception in setting up logging: %s" % (sys.exc_info()[0]))
         logging.critical("Could not set up logging! Exiting!")
-        sys.exit(1)
+        sys.exit(2)
 
 def main(argv=None):
     """Command line parser, begins DaemonContext for main loop"""
@@ -83,10 +83,10 @@ def main(argv=None):
     # read configuration from file
     config = configparser.ConfigParser()
     try:
-        config.read("dhdynupdate.conf")
+        config.read("/etc/dhdynupdate.conf")
     except:
         print("Error reading config file!")
-        sys.exit()
+        sys.exit(3)
 
     if args.log_level == "CRITICAL":
         log_level = 50
@@ -118,12 +118,15 @@ def main(argv=None):
     except KeyError as error:
         # Technically, logger isn't "configured" -- it'll dump messages to the
         # console.
-        logging.critical("Could not find configuration for %s" % (error))
-        sys.exit(1)
+        print("Could not find configuration for %s" % (error))
+#        logging.critical("Could not find configuration for %s" % (error))
+        sys.exit(4)
     except:
-        logging.critical("Exception in parsing configuration settings: %s"
+        print("Exception in parsing configuration settings: %s"
                          % (sys.exc_info()[0]))
-        sys.exit(1)
+#        logging.critical("Exception in parsing configuration settings: %s"
+#                         % (sys.exc_info()[0]))
+        sys.exit(5)
 
 #   When in doubt, do not run as a daemon. Daemon keeps stack traces from being
 #   printed, and you're left wondering why the dæmon is quitting.
@@ -133,13 +136,28 @@ def main(argv=None):
             # DaemonContext. Outside the daemoncontext requires a lot more work...
             setup_logger(logfile, log_level)
             logging.warn("Starting dhdynupdater...")
-            pf = open(pid_file, 'w')
-            pf.write("%s\n" % (os.getpid()))
-            pf.close()
-            dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
+            try:
+                pf = open(pid_file, 'w')
+                pf.write("%s\n" % (os.getpid()))
+                pf.close()
+            except:
+                logging.critical("Exception in setting up pidfile: %s" % (sys.exc_info()[0]))
+                sys.exit(6)
+            try:
+                dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
+            except:
+                logging.critical("Exception in creating dh_dns: %s" % (sys.exc_info()[0]))
             while True:
-                dh_dns.update_if_necessary()
-                time.sleep(update_interval)
+                logging.warn("Starting dhdynupdater main loop...")
+                try:
+                    dh_dns.update_if_necessary()
+                    time.sleep(update_interval)
+                except:
+                    logging.critical("Exception in main loop: %s" % (sys.exc_info()[0]))
+                    logging.warn("Closing dhdynupdater...")
+                    logging.shutdown()
+                    sys.exit(0)
+                logging.warn("looping dhdynupdater main loop...")
     else:
         setup_logger(logfile, log_level)
         logging.warn("Starting dhdynupdater...")
