@@ -31,8 +31,10 @@
 import argparse
 import configparser
 import daemon
+import lockfile
 import logging
 import netifaces
+import os
 import time
 import sys
 from dhdns import dhdns
@@ -108,6 +110,7 @@ def main(argv=None):
         local_hostname = config[args.config_name]["local_hostname"]
         logfile = config["Global"]["log_file"]
         update_interval = int(config["Global"]["update_interval"])
+        pid_file = config["Global"]["pidfile"]
         for addr_type in supported_address_families:
             interface = config["Global"][addr_type]
             if interface in netifaces.interfaces():
@@ -125,11 +128,14 @@ def main(argv=None):
 #   When in doubt, do not run as a daemon. Daemon keeps stack traces from being
 #   printed, and you're left wondering why the dæmon is quitting.
     if args.daemonize:
-        with daemon.DaemonContext():
+        with daemon.DaemonContext(pidfile=lockfile.FileLock(pid_file)):
             # set up logging; it's much easier to just set it up within the
             # DaemonContext. Outside the daemoncontext requires a lot more work...
             setup_logger(logfile, log_level)
             logging.warn("Starting dhdynupdater...")
+            pf = open(pid_file, 'w')
+            pf.write("%s\n" % (os.getpid()))
+            pf.close()
             dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
             while True:
                 dh_dns.update_if_necessary()
