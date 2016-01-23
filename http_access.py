@@ -53,7 +53,7 @@ class http_access():
             print(message)
             logging.critical(message)
             raise
-            sys.exit()
+            sys.exit(8)
         dreamhost_response.close()
         logging.debug("API URL:" + self.api_url)
         logging.debug(dreamhost_response.request.headers)

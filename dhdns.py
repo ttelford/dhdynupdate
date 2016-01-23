@@ -214,7 +214,7 @@ class dhdns():
             request_params["type"] = "AAAA"
         else:
             logging.critical("Invalid address type %s ! Exiting!" % (address))
-            sys.exit()
+            sys.exit(7)
 
         #And now that we have the parameters, we update DreamHost:
         logging.info("Adding DNS entry with parameters: %s" %(request_params))
