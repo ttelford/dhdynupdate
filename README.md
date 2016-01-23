@@ -58,9 +58,12 @@ Configuration goes in `dhdynupdate.conf`, and is in the [Python 'config' file fo
 
 ## TL;DR config:
 * Modify the following entires in `/etc/dhdynudpate.conf`:
+
 	`AF_INET =  <interface with the IPv4 address you want to add to DreamHost DNS>`  
 	`AF_INET6 = <interface with the IPv6 address you want to add to DreamHost DNS>`  
+
 * Under `[your.domain.com]`, modify:
+
 	`api_key = <your DreamHost API key>`
 	`local_hostname = <the hostname you wish to add to DreamHost DNS>`
 
