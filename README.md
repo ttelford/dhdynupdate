@@ -8,17 +8,21 @@ the internet: to update DNS records with IP addresses for your local machine
 for a domain hosted by [DreamHost](https://www.dreamhost.com), using the
 [DreamHost API](http://wiki.dreamhost.com/Application_programming_interface).
 
+When started using the systemd service file, `dhdynupdate` as an unprivileged
+process. `dhdynudpate` can also execute as your user process.
+
 ## Features ##
 
 * `dhdynupdate` supports updating both A and AAAA (IPv4 and IPv6) addresses.
 * DNS records are updated on an as-needed basis to avoid sending unnecessary
 DreamHost API calls
-* `dhdynupdate` always verifies & updates the DNS records for the configured
+* `dhdynupdate` verifies & updates the DNS records for the configured
 hostname upon dæmon instantiation
     * From there, `dhdynupdate` check your local IPv4 and/or IPv6 addresses.
     * If a IPv4/IPv6 address changes, `dhdynupdate` will update the
       corresponding entry in your DreamHost DNS Zone.
 
+## Dependencies
 `dhdynupdate` uses the following external modules:
 
 * [`daemon`](https://pypi.python.org/pypi/python-daemon/)
@@ -28,24 +32,53 @@ hostname upon dæmon instantiation
 * [`requests`](http://docs.python-requests.org/en/latest/)
     * Available in Debian/Ubuntu as `python3-requests`
 
+# Installation
+No binary packages exist yet, but, I've tested the following configuration on a
+Debian Unstable/Sid system.
+
+There is not an "easy" installation at this time; you will be required to copy
+files into their proper destinations, and create a user for the dæmon to
+execute as.
+
+* Install dependencies:  
+    * On Debian or Ubuntu, you should be able to:  `apt-get install python3-daemon python3-netifaces python3-requests`
+* Create a `dhdynupdate` user/group for the dhdynupdate dæmon to execute as
+* Copy (or clone) the git repository to `/usr/local/dhdyupdate`
+* Copy `dhdynupdate.conf` to `/etc/`
+* Create a directory for the logfile:
+    `mkdir -p /var/log/dhdynupdate`
+    `chown dhdynupdate:dhdynupdate /var/log/dhdynupdate`
+* Install/activate the systemd service file:
+    * Copy `dhdynupdate.service` to `/lib/systemd/system/`
+    * `systemctl daemon-reload`
+    * `systemctl enable dhdynupdate.service`
+
 # Configuration
 Configuration goes in `dhdynupdate.conf`, and is in the [Python 'config' file format.](https://docs.python.org/3/library/configparser.html#supported-ini-file-structure)
 
-The default config has a couple of sections:
+## TL;DR config:
+* Modify the following entires in `/etc/dhdynudpate.conf`:
+	`AF_INET =  <interface with the IPv4 address you want to add to DreamHost DNS>`  
+	`AF_INET6 = <interface with the IPv6 address you want to add to DreamHost DNS>`  
+* Under `[your.domain.com]`, modify:
+	`api_key = <your DreamHost API key>`
+	`local_hostname = <the hostname you wish to add to DreamHost DNS>`
 
-##`Global`
+
+## Config File Sections
+###`Global`
 This section has global configuration options:
 
 * Network interfaces to update the DNS records for
 * [The DreamHost Web API URL](http://wiki.dreamhost.com/Application_programming_interface), and the logfile location.
 
-##`DreamHost API Test Account`
+###`DreamHost API Test Account`
 
 * Uses The DreamHost test API key
 * Only allows read-only operations
 * It's a useful example to show the file format as well as a harmless test
 
-##`your.domain.name`
+###`your.domain.name`
 
 * Insert `your.domain.name` for the name of your domain name.
 * Also put in your DreamHost API key.
@@ -56,18 +89,22 @@ This section has global configuration options:
         # External IPv4 and IPv6 interface to use
         # Separated as the subnet provided by my ISP is on a different interface
         # than the routing IP on my external interface.
-        ipv6_if = eth0
-        ipv4_if = eth1
+        # IPv4 is the AF_INET address family
+        AF_INET = eth1
+        # IPv6 is the AF_INET6 family
+        AF_INET6 = eth0
         # Log file
-        log_file = dhdynupdate.log
+        log_file = /var/log/dhdynupdate.log
         # The update interval (in seconds)
         # for reference, 1h = 3600 s
         update_interval = 3600
-
+        # PID file location
+        pidfile = /run/dhdynupdate/dhdynupdate.pid
+        
         [DreamHost API Test Account]
         api_key = 6SHU5P2HLDAYECUM
         local_hostname = ssh.thebesthostever.com
-
+        
         [your.domain.name]
         api_key=6SHU5P2HLDAYECUM
         local_hostname = a6.groo.com
@@ -80,11 +117,33 @@ If you don't already have an appropriate API key:
     * Make sure that `dns-*` is checked
     * Make sure *everything else* is unchecked
 
+# Command-line usage
+
+	usage: dhdynupdate.py [-h] [-d] [--debug lvl] [-c config]
+	
+	optional arguments:
+	  -h, --help            show this help message and exit
+	  -d, --daemon          Execute dhdynupdate.py as a dæmon
+	  --debug lvl           Log Level, one of CRITICAL, ERROR, WARNING, INFO,
+	                        DEBUG
+	  -c config, --config config
+	                        Configuration name
+
+If executed in daemon mode, `dhdynupdate` will dæmonize into a background
+process, suitable for management using an init script or via systemd.
+
+A config name is the name of the `dhdynupdate.conf` section you wish to use.
+Multiple hostnames and API keys can be configured, enabling you to configure
+multiple DNS domains or hostnames, and select which one to update at runtime.
+ 
+For example, `./dhdynupdate.py -c your.domain.com` will load the
+`[your.domain.name]` section in the `dhdynupdate.conf`.
+
 # TODO:
 
-* `systemd` unit files
 * Proper [Python packaging](https://python-packaging.readthedocs.org/en/latest/)
-* Distro packages
+* Maybe an RPM or Debian package
+* OS X support
 
 # FreeBSD License
 Copyright (c) 2016, Troy Telford
