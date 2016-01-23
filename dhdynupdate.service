@@ -12,6 +12,7 @@ KillMode=process
 Restart=on-failure
 User=dhdynupdate
 TimeoutSec=10
+PermissionsStartOnly=true
 
 [Install]
 WantedBy=multi-user.target
