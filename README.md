@@ -72,7 +72,7 @@ Configuration goes in `dhdynupdate.conf`, and is in the [Python 'config' file fo
 ###`Global`
 This section has global configuration options:
 
-* Network interfaces to update the DNS records for. Empty string interfaces are ignored.
+* Network interfaces to update the DNS records for. Empty string interfaces are ignored. The special interface "-ipify.org" performs an external lookup.
 * [The DreamHost Web API URL](http://wiki.dreamhost.com/Application_programming_interface), and the logfile location.
 
 ###`DreamHost API Test Account`

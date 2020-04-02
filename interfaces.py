@@ -32,6 +32,7 @@ import ipaddress
 import logging
 import netifaces
 import sys
+import requests
 
 """
 This module gets the current IPv4 and/or IPv6 addresses of the network
@@ -67,46 +68,60 @@ class interfaces():
         addresses = []
         for addr_type in interfaces:
             address_retrieved = True
-            # Netifaces has a lookup for address families. The index
-            # number is os-dependent, so we look up the index using the
-            # method provided by netifaces.
-            if addr_type == "AF_INET6":
-                address_family = netifaces.AF_INET6
-            elif addr_type == "AF_INET":
-                address_family = netifaces.AF_INET
-            interface_addresses = netifaces.ifaddresses(interfaces[addr_type])
-            try:
-                if addr_type == "AF_INET6":
-                    # I'm not counting on IPv6 to only have one address;
-                    # mulitple is common as there's always link-local in
-                    # addition to an internet-routable address.
-                    # Make sure we don't get a link-local IPv6 Address.
-                    # These are in the subnet fe80:://10
-                    for address in interface_addresses[address_family]:
-                        address_retrieved = True
-                        if address["addr"].split(':')[0] != "fe80":
-                            new_address = address["addr"]
-                            break
-                        # We haven't found a non-link-local IPv6 Address
-                        address_retrieved = False
-                else:
-                    new_address = interface_addresses[address_family][0]["addr"]
-            except ValueError as exception:
-                # Interface doesn't have an address we could report.
-                logging.warning("Could not get %s address from interface %s."
-                                % (addr_type, interfaces[addr_type]))
-                logging.warning("Exception: %s" % (exception))
-                address_retrieved = False
-            except KeyError as index:
-                # Most likely, there is no IP address for the address family
-                # (ie. no IPv4 or IPv6 address on the interface)
-                if str(index) == str(address_family):
-                    logging.warning("No %s address is assigned to interface %s." 
+
+            # Perform special external lookup
+            if interfaces[addr_type] == "-ipify.org":
+                try:
+                    if addr_type == "AF_INET6":
+                        new_address = requests.get('https://api6.ipify.org').text
+                    elif addr_type == "AF_INET":
+                        new_address = requests.get('https://api.ipify.org').text
+                except requests.exceptions.ConnectionError as exception:
+                    logging.warning("External %s address lookup for %s failed."
                                     % (addr_type, interfaces[addr_type]))
-                else:
-                    logging.error("Unknown KeyError %s in finding %s address"
-                                  % (index, addr_type))
-                address_retrieved = False
+                    logging.warning("Exception: %s" % (exception))
+                    address_retrieved = False
+            else:
+                # Netifaces has a lookup for address families. The index
+                # number is os-dependent, so we look up the index using the
+                # method provided by netifaces.
+                if addr_type == "AF_INET6":
+                    address_family = netifaces.AF_INET6
+                elif addr_type == "AF_INET":
+                    address_family = netifaces.AF_INET
+                interface_addresses = netifaces.ifaddresses(interfaces[addr_type])
+                try:
+                    if addr_type == "AF_INET6":
+                        # I'm not counting on IPv6 to only have one address;
+                        # mulitple is common as there's always link-local in
+                        # addition to an internet-routable address.
+                        # Make sure we don't get a link-local IPv6 Address.
+                        # These are in the subnet fe80:://10
+                        for address in interface_addresses[address_family]:
+                            address_retrieved = True
+                            if address["addr"].split(':')[0] != "fe80":
+                                new_address = address["addr"]
+                                break
+                            # We haven't found a non-link-local IPv6 Address
+                            address_retrieved = False
+                    else:
+                        new_address = interface_addresses[address_family][0]["addr"]
+                except ValueError as exception:
+                    # Interface doesn't have an address we could report.
+                    logging.warning("Could not get %s address from interface %s."
+                                    % (addr_type, interfaces[addr_type]))
+                    logging.warning("Exception: %s" % (exception))
+                    address_retrieved = False
+                except KeyError as index:
+                    # Most likely, there is no IP address for the address family
+                    # (ie. no IPv4 or IPv6 address on the interface)
+                    if str(index) == str(address_family):
+                        logging.warning("No %s address is assigned to interface %s." 
+                                        % (addr_type, interfaces[addr_type]))
+                    else:
+                        logging.error("Unknown KeyError %s in finding %s address"
+                                      % (index, addr_type))
+                    address_retrieved = False
             if address_retrieved:
                 new_address = ipaddress.ip_address(new_address)
                 addresses.append(new_address)

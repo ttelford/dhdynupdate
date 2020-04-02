@@ -118,7 +118,8 @@ def main(argv=None):
         pid_file = config["Global"]["pidfile"]
         for addr_type in supported_address_families:
             interface = config["Global"][addr_type]
-            if interface in netifaces.interfaces():
+            # Accept valid interfaces and special external lookup "interface"
+            if interface in netifaces.interfaces() or interface == "-ipify.org":
                 configured_interfaces[addr_type] = interface
     except KeyError as error:
         # Technically, logger isn't "configured" -- it'll dump messages to the
