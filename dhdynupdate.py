@@ -119,6 +119,8 @@ def main(argv=None):
         # Technically, logger isn't "configured" -- it'll dump messages to the
         # console.
         print("Could not find configuration for %s" % (error))
+        print("Create a configuration for this account, or specify a different "+
+              "account with '-c'")
 #        logging.critical("Could not find configuration for %s" % (error))
         sys.exit(4)
     except:
