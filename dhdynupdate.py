@@ -73,6 +73,11 @@ def main(argv=None):
                             default="WARNING", required=False,
                             dest="log_level", metavar="lvl",
                             help="Log Level, one of CRITICAL, ERROR, WARNING, INFO, DEBUG")
+    cmd_parser.add_argument("-f", "--config-file", action='store',
+                            type=str, default="/etc/dhdynupdate.conf",
+                            required=False, metavar="path",
+                            dest="configfile_path",
+                            help="Configuration file path")
     cmd_parser.add_argument("-c", "--config", action='store',
                             type=str, default="DreamHost API Test Account",
                             required=False, metavar="config",
@@ -82,9 +87,9 @@ def main(argv=None):
 
     # read configuration from file
     config = configparser.ConfigParser()
-    try:
-        config.read("/etc/dhdynupdate.conf")
-    except:
+    if len(config.read(args.configfile_path)) != 1:
+        # Behavior of configparser.read() is to fail silently,
+        #  returning an empty list of config filenames.
         print("Error reading config file!")
         sys.exit(3)
 
@@ -113,12 +118,15 @@ def main(argv=None):
         pid_file = config["Global"]["pidfile"]
         for addr_type in supported_address_families:
             interface = config["Global"][addr_type]
-            if interface in netifaces.interfaces():
+            # Accept valid interfaces and special external lookup "interface"
+            if interface in netifaces.interfaces() or interface == "-ipify.org":
                 configured_interfaces[addr_type] = interface
     except KeyError as error:
         # Technically, logger isn't "configured" -- it'll dump messages to the
         # console.
         print("Could not find configuration for %s" % (error))
+        print("Create a configuration for this account, or specify a different "+
+              "account with '-c'")
 #        logging.critical("Could not find configuration for %s" % (error))
         sys.exit(4)
     except:

@@ -113,8 +113,12 @@ class dhdns():
                     # Multiple entries may, if we're using native dual-stack IPv4 &
                     # IPv6.
                     if entry["record"] == self.local_hostname:
-                        logging.debug("Editable value:  %s" % entry)
-                        target_records.append(entry)
+                        # Ignore CNAME,NS,PTR,NAPTR,SRV, and TXT records
+                        if entry['type'] not in ["CNAME","NS","PTR","NAPTR","SRV","TXT"]:
+                            logging.debug("Editable value:  %s" % entry)
+                            target_records.append(entry)
+                        else:
+                            logging.info("Ignoring %s.%s record" % (entry["record"], entry["type"]))
             else: # read-only entry
                 logging.debug("Non-editable value:  %s" % entry)
                 if "record" in entry:
