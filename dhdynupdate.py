@@ -73,6 +73,11 @@ def main(argv=None):
                             default="WARNING", required=False,
                             dest="log_level", metavar="lvl",
                             help="Log Level, one of CRITICAL, ERROR, WARNING, INFO, DEBUG")
+    cmd_parser.add_argument("-f", "--config-file", action='store',
+                            type=str, default="/etc/dhdynupdate.conf",
+                            required=False, metavar="path",
+                            dest="configfile_path",
+                            help="Configuration file path")
     cmd_parser.add_argument("-c", "--config", action='store',
                             type=str, default="DreamHost API Test Account",
                             required=False, metavar="config",
@@ -82,7 +87,7 @@ def main(argv=None):
 
     # read configuration from file
     config = configparser.ConfigParser()
-    if len(config.read("/etc/dhdynupdate.conf")) != 1:
+    if len(config.read(args.configfile_path)) != 1:
         # Behavior of configparser.read() is to fail silently,
         #  returning an empty list of config filenames.
         print("Error reading config file!")
