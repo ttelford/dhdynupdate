@@ -82,9 +82,9 @@ def main(argv=None):
 
     # read configuration from file
     config = configparser.ConfigParser()
-    try:
-        config.read("/etc/dhdynupdate.conf")
-    except:
+    if len(config.read("/etc/dhdynupdate.conf")) != 1:
+        # Behavior of configparser.read() is to fail silently,
+        #  returning an empty list of config filenames.
         print("Error reading config file!")
         sys.exit(3)
 
