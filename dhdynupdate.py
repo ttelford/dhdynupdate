@@ -38,6 +38,7 @@ import os
 import time
 import sys
 from dhdns import dhdns
+import interfaces
 
 def setup_logger(logfile, log_level):
     """Does logging setup, using python logging"""
@@ -78,11 +79,16 @@ def main(argv=None):
                             required=False, metavar="path",
                             dest="configfile_path",
                             help="Configuration file path")
+    config_name_default = "DreamHost API Test Account" 
     cmd_parser.add_argument("-c", "--config", action='store',
-                            type=str, default="DreamHost API Test Account",
+                            type=str, default=config_name_default,
                             required=False, metavar="config",
                             dest="config_name",
-                            help="Configuration name")
+                            help="Configuration name; Conflicts with -m")
+    cmd_parser.add_argument("-m", "--monitor-only", action='store_true',
+                            default=False, required=False,
+                            dest="monitor_only",
+                            help="Only monitor the configured interfaces - don't access DreamHost API; Conflicts with -c")
     args = cmd_parser.parse_args()
 
     # read configuration from file
@@ -106,13 +112,18 @@ def main(argv=None):
     else:
         log_level = 0
 
+    if args.monitor_only and not args.config_name in [config_name_default, ""]:
+        print("Cannot specify -c and -m")
+        sys.exit(4)
+
     # Get configuration settings
     try:
         supported_address_families = ("AF_INET", "AF_INET6")
         configured_interfaces = {}
-        api_key = config[args.config_name]["api_key"]
         api_url = config["Global"]["api_url"]
-        local_hostname = config[args.config_name]["local_hostname"]
+        if not args.monitor_only:
+            api_key = config[args.config_name]["api_key"]
+            local_hostname = config[args.config_name]["local_hostname"]
         logfile = config["Global"]["log_file"]
         update_interval = int(config["Global"]["update_interval"])
         pid_file = config["Global"]["pidfile"]
@@ -151,14 +162,22 @@ def main(argv=None):
             except:
                 logging.critical("Exception in setting up pidfile: %s" % (sys.exc_info()[0]))
                 sys.exit(6)
-            try:
-                dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
-            except:
-                logging.critical("Exception in creating dh_dns: %s" % (sys.exc_info()[0]))
+
+            if not monitor_only:
+                try:
+                    dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
+                except:
+                    logging.critical("Exception in creating dh_dns: %s" % (sys.exc_info()[0]))
+            else:
+                interface = interfaces.interfaces(configured_interfaces)
             while True:
                 logging.warn("Starting dhdynupdater main loop...")
                 try:
-                    dh_dns.update_if_necessary()
+                    if args.monitor_only:
+                        interface.addresses = interface.get_if_addresses(configured_interfaces)
+                        print(interface.addresses)
+                    else:
+                        dh_dns.update_if_necessary()
                     time.sleep(update_interval)
                 except:
                     logging.critical("Exception in main loop: %s" % (sys.exc_info()[0]))
@@ -167,10 +186,14 @@ def main(argv=None):
                     sys.exit(0)
                 logging.warn("looping dhdynupdater main loop...")
     else:
-        setup_logger(logfile, log_level)
-        logging.warn("Starting dhdynupdater...")
-        dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
-        dh_dns.update_if_necessary()
+        if args.monitor_only:
+            interface = interfaces.interfaces(configured_interfaces)
+            print(interface.addresses)
+        else:
+            setup_logger(logfile, log_level)
+            logging.warn("Starting dhdynupdater...")
+            dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
+            dh_dns.update_if_necessary()
 
     logging.warn("Closing dhdynupdater...")
     logging.shutdown()
