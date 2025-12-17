@@ -154,7 +154,7 @@ def main(argv=None):
             # set up logging; it's much easier to just set it up within the
             # DaemonContext. Outside the daemoncontext requires a lot more work...
             setup_logger(logfile, log_level)
-            logging.warn("Starting dhdynupdater...")
+            logging.warning("Starting dhdynupdater...")
             try:
                 pf = open(pid_file, 'w')
                 pf.write("%s\n" % (os.getpid()))
@@ -162,8 +162,7 @@ def main(argv=None):
             except:
                 logging.critical("Exception in setting up pidfile: %s" % (sys.exc_info()[0]))
                 sys.exit(6)
-
-            if not monitor_only:
+            if not args.monitor_only:
                 try:
                     dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
                 except:
@@ -171,7 +170,7 @@ def main(argv=None):
             else:
                 interface = interfaces.interfaces(configured_interfaces)
             while True:
-                logging.warn("Starting dhdynupdater main loop...")
+                logging.warning("Starting dhdynupdater main loop...")
                 try:
                     if args.monitor_only:
                         interface.addresses = interface.get_if_addresses(configured_interfaces)
@@ -181,10 +180,10 @@ def main(argv=None):
                     time.sleep(update_interval)
                 except:
                     logging.critical("Exception in main loop: %s" % (sys.exc_info()[0]))
-                    logging.warn("Closing dhdynupdater...")
+                    logging.warning("Closing dhdynupdater...")
                     logging.shutdown()
                     sys.exit(0)
-                logging.warn("looping dhdynupdater main loop...")
+                logging.warning("looping dhdynupdater main loop...")
     else:
         if args.monitor_only:
             interface = interfaces.interfaces(configured_interfaces)
@@ -195,7 +194,7 @@ def main(argv=None):
             dh_dns = dhdns(api_key, api_url, local_hostname, configured_interfaces)
             dh_dns.update_if_necessary()
 
-    logging.warn("Closing dhdynupdater...")
+    logging.warning("Closing dhdynupdater...")
     logging.shutdown()
 
 if __name__ == "__main__":
